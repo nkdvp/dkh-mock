@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "esModuleInterop": true,
+    "noImplicitAny": true,
+    "target": "es2020",
+    "lib": ["es2020"],
+    "module": "es2020",
+    "moduleResolution": "Node",
+    "skipLibCheck": true,
+    "declaration": true,
+    "pretty": true,
+    "typeRoots" : ["./node_modules/@types"],
+    "sourceMap": true,
+    "baseUrl": "./",
+    "outDir": "./dist",
+    "resolveJsonModule": true,
+  },
+  "exclude": [
+    "node_modules",
+    "test",
+    "./dist"
+  ]
+}

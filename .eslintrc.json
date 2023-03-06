@@ -1,0 +1,31 @@
+{
+  "extends": [
+    "eslint:recommended",
+    "plugin:@typescript-eslint/recommended",
+    "plugin:import/recommended",
+    "plugin:import/errors",
+    "plugin:import/warnings",
+    "plugin:import/typescript"
+  ],
+  "rules": {
+    "no-restricted-syntax": "warn",
+    "@typescript-eslint/no-explicit-any": "off",
+    "no-underscore-dangle": "off",
+    "keyword-spacing": "off",
+    "no-use-before-define": ["error", {
+      "variables": false
+    }],
+    "eqeqeq": "error",
+    "no-param-reassign" : "error",
+    "no-await-in-loop" : "error",
+    "curly" : "off",
+    "quotes"  : ["error","single",{ "avoidEscape": true }]
+  },
+  "parser": "@typescript-eslint/parser",
+  "plugins": [
+    "@typescript-eslint"
+  ],
+  "parserOptions": {
+    "project": "./tsconfig.json"
+  }
+}
