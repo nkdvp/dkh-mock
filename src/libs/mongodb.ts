@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Logger from './logger';
 
+mongoose.set('debug', process.env.NODE_ENV === 'development');
+
 function wait(ms: number) {
   return new Promise((resolve) => {
     setTimeout(() => {

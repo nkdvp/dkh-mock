@@ -5,7 +5,7 @@ apmAgent;
 import cluster from 'cluster';
 import os from 'os';
 import ExpressServer from './express';
-// import mongodb from './libs/mongodb';
+import mongodb from './libs/mongodb';
 // import mysql from './libs/mysql';
 // import kafkaConsumer from './libs/kafkajsConsumer';
 // import kafkaProducer from './libs/kafkajsProducer';
@@ -16,7 +16,7 @@ const logger = Logger.create('index.ts');
 async function start() {
   logger.info(`>>>>>>>>>>${process.env.npm_package_name.toUpperCase()}<<<<<<<<<<`);
   // >>>>>>MONGODB
-  // mongodb();
+  mongodb();
   // >>>>>>MYSQL
   // const sqlConnection: any = await mysql;
   // await sqlConnection.execute('');
