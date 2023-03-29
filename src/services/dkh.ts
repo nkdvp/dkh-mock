@@ -12,12 +12,16 @@ const apis: ExpressHandler[] = [
     path: '/dang-nhap',
     method: 'POST',
     params: {
-      $$strict: true,
+      // $$strict: true,
+      // username: 'string',
+      // password: 'string',
     },
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
+        logger.info('cookie: ', req.cookies);
+        logger.info('headers:', req.headers);
         // TODO: return __RequestVerificationToken,
         // temporary using user-id in headers
         return commonResponse(res, '', '', null);
