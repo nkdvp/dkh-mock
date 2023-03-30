@@ -2,8 +2,9 @@ import { ExpressHandler, commonResponse, commonError } from '../interfaces/expre
 import Logger from '../libs/logger';
 import langs from '../constants/langs';
 import subjectsModel from '../models/subjects.model';
-import studentSubjectsModel from '../models/studentSubject.model'
-import studentSelectionModel from '../models/studentSelection.model'
+import studentSubjectsModel from '../models/studentSubject.model';
+import studentSelectionModel from '../models/studentSelection.model';
+import { v4 as uuid } from 'uuid';
 
 const logger = Logger.create('healthcheck.ts');
 const apis: ExpressHandler[] = [
@@ -22,6 +23,22 @@ const apis: ExpressHandler[] = [
 
         logger.info('cookie: ', req.cookies);
         logger.info('headers:', req.headers);
+        logger.info('body: ', req.body);
+        const CSRF1 = req.cookies?.__RequestVerificationToken;
+        const CSRF2 = req.body?.__RequestVerificationToken;
+        const username = req.body?.LoginName;
+        const password = req.body?.Password;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+
+        // logger.info('get headers done');
+        if (!CSRF1 || !CSRF2 || !username || !password) return res.status(500).send('Something broke!');
+        if (sessionId) return res.status(200).send('Login already');
+        // logger.info('bruhh');
+        const newSessionId = uuid();
+        // logger.info('sessionId: ', newSessionId);
+        res.cookie('ASP.NET_SessionId', newSessionId);
+        // logger.info('sessionId: ', newSessionId);
+        return res.status(200).send('Login done');
         // TODO: return __RequestVerificationToken,
         // temporary using user-id in headers
         return commonResponse(res, '', '', null);
@@ -42,10 +59,7 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
-        const listSubjects = await subjectsModel
-          .find()
-          .select({ _id: 0, __v: 0})
-          .lean();
+        const listSubjects = await subjectsModel.find().select({ _id: 0, __v: 0 }).lean();
 
         return commonResponse(res, '', '', listSubjects);
       } catch (err) {
@@ -64,17 +78,14 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
-        
-        const listSubjects = await studentSubjectsModel
-          .find()
-          .select({ _id: 0, __v: 0})
-          .lean();
+
+        const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
         const listSubjectsSelected = await studentSelectionModel
           .find()
-          .select({ _id: 0, __v: 0})
+          .select({ _id: 0, __v: 0 })
           .lean();
 
-        return commonResponse(res, '', '', { listSubjects, listSubjectsSelected, });
+        return commonResponse(res, '', '', { listSubjects, listSubjectsSelected });
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err);
         return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
@@ -100,10 +111,12 @@ const apis: ExpressHandler[] = [
         // validate subject_code
         // select subject for student
         try {
-          await studentSelectionModel.insertMany([{
-            student_id: userid,
-            subject_code,
-          }])
+          await studentSelectionModel.insertMany([
+            {
+              student_id: userid,
+              subject_code,
+            },
+          ]);
         } catch (err) {
           logger.error('register');
         }
@@ -132,10 +145,10 @@ const apis: ExpressHandler[] = [
             student_id: userid,
           })
           .lean();
-        const updateArray = listSubjectsSelected.map(((elem) => ({
+        const updateArray = listSubjectsSelected.map((elem) => ({
           student_id: elem.student_id,
           subject_code: elem.subject_code,
-        })));
+        }));
         const selectionIds = listSubjectsSelected.map((elem) => elem._id);
         try {
           await studentSubjectsModel.insertMany(updateArray);
@@ -143,8 +156,8 @@ const apis: ExpressHandler[] = [
           await studentSelectionModel.deleteMany({
             _id: {
               $in: selectionIds,
-            }
-          })
+            },
+          });
         } catch (err) {
           logger.error('confirm failed: ', err.message);
         }
@@ -168,7 +181,7 @@ const apis: ExpressHandler[] = [
       subject_name: 'string',
       subject_lecture: 'string',
       subject_schedule: 'string',
-      limit_student: 'number|optional', 
+      limit_student: 'number|optional',
     },
     action: async (req, res) => {
       try {
@@ -188,7 +201,7 @@ const apis: ExpressHandler[] = [
               subject_lecture,
               subject_schedule,
               limit_student,
-            }
+            },
           ]);
           logger.info('insert succeed');
         } catch (err) {

@@ -19,7 +19,7 @@ export default function implementCache(md5: any, storage: Storage): Cache {
     expireCycle: Time,
     callback: any,
   ): Promise<any> {
-    const key: string = identifier + md5(args);
+    const key: string = identifier + md5(args.join('|'));
     const currentMillis = new Date().getTime();
     const expire = toMillis(expireCycle);
     const refresh = Math.min(toMillis(refreshCycle), expire);
