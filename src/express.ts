@@ -10,6 +10,7 @@ import unhandedErrorFault from './middlewares/unhandedErrorRoute';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import cookieParser from 'cookie-parser';
 
+
 async function ExpressServer() {
   const logger = Logger.create('EXPRESS SERVER');
   const app = express();

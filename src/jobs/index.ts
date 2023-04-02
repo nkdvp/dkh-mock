@@ -1,4 +1,5 @@
 import Logger from '../libs/logger';
+import { getTokens, jobGetTokens, parseCookieStringToObj, updateReturnField } from './dkhTokens';
 
 const logger = Logger.create('jobs/index.ts');
 const startOtherJobs = false;
@@ -9,6 +10,8 @@ async function runJobs() {
     /// ///// BEFORE CACHE ////////
     // if (refreshDb === 'true') {}
     /// ///// CACHE /////////////
+    // jobGetTokens();
+    // updateReturnField();
   } catch (e) {
     logger.error('Run Jobs Error', e.message);
   }

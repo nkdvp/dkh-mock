@@ -10,6 +10,30 @@ const logger = Logger.create('healthcheck.ts');
 const apis: ExpressHandler[] = [
   // doing login
   {
+    path: '/',
+    method: 'POST',
+    params: {
+      // $$strict: true,
+      // username: 'string',
+      // password: 'string',
+    },
+    action: async (req, res) => {
+      try {
+        logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        // const tokenRecord = 
+
+        return res.status(200).send('Get cookie done');
+        // TODO: return __RequestVerificationToken,
+        return commonResponse(res, '', '', null);
+      } catch (err) {
+        logger.error(req.originalUrl, req.method, 'error:', err);
+        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+      }
+    },
+  },
+  // doing login
+  {
     path: '/dang-nhap',
     method: 'POST',
     params: {
