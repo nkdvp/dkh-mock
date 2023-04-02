@@ -26,6 +26,10 @@ const mainSchema = new mongoose.Schema<VerifyToken>(
     collection: 'verify-tokens',
   },
 );
+mainSchema.index({ returnAt: 1});
+mainSchema.index({ csrf1: 1});
+mainSchema.index({ sessionId: 1});
+mainSchema.index({ sessionStartAt: 1});
 
 const model = mongoose.model('verifyTokens', mainSchema);
 export default model;

@@ -4,14 +4,15 @@ import langs from '../constants/langs';
 import subjectsModel from '../models/subjects.model';
 import studentSubjectsModel from '../models/studentSubject.model';
 import studentSelectionModel from '../models/studentSelection.model';
+import verifyTokensModel from '../models/verifyToken.model';
 import { v4 as uuid } from 'uuid';
 
 const logger = Logger.create('healthcheck.ts');
 const apis: ExpressHandler[] = [
   // doing login
   {
-    path: '/',
-    method: 'POST',
+    path: '/dang-nhap',
+    method: 'GET',
     params: {
       // $$strict: true,
       // username: 'string',
@@ -21,7 +22,18 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
-        // const tokenRecord = 
+        const present = new Date();
+        const tokenRecord = await verifyTokensModel
+          .findOneAndUpdate({}, {
+            returnAt: present,
+          }, { new: true})
+          .sort({ returnAt: 1})
+          .lean();
+        if (tokenRecord.returnAt.getTime() !== present.getTime()) return res.status(500).send('Get token again');
+
+        res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
+        res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
+        logger.info('token record: ', tokenRecord);
 
         return res.status(200).send('Get cookie done');
         // TODO: return __RequestVerificationToken,

@@ -2,7 +2,6 @@ import axios from 'axios';
 import { VerifyToken } from '../interfaces/verifyTokens';
 import { getTokenFromHtml } from '../libs/domHTML';
 import Logger from '../libs/logger';
-import cookieParser from 'cookie-parser';
 import verifyTokensModel from '../models/verifyToken.model';
 
 const logger = Logger.create('DKH_TOKEN_JOB');
@@ -39,19 +38,19 @@ const getTokens = async () => {
 
   const returnObj = { csrf1, csrf2 };
   logger.info('get token: ', returnObj);
-  return returnObj
+  return returnObj;
 };
 
 const jobGetTokens = async () => {
   const tokenObj = await getTokens();
-  const body: VerifyToken = { 
+  const body: VerifyToken = {
     ...tokenObj,
     createdAt: new Date(),
     returnAt: new Date(),
-  }
+  };
   verifyTokensModel.insertMany([body]);
 
-  setTimeout( () => jobGetTokens(), 1000);
+  setTimeout(() => jobGetTokens(), 1000);
 };
 
 const updateReturnField = async () => {
@@ -62,16 +61,19 @@ const updateReturnField = async () => {
     // eslint-disable-next-line no-await-in-loop
     const records = await verifyTokensModel
       .find()
-      .sort({_id: 1})
+      .sort({ _id: 1 })
       .limit(numRecord)
       .skip(idx)
       .lean();
     const promiseFixRecords = records.map(async (record) => {
-      await verifyTokensModel.updateOne({
-        _id: record._id,
-      }, {
-        returnAt: new Date(record.createdAt),
-      });
+      await verifyTokensModel.updateOne(
+        {
+          _id: record._id,
+        },
+        {
+          returnAt: new Date(record.createdAt),
+        },
+      );
     });
     // eslint-disable-next-line no-await-in-loop
     await Promise.all(promiseFixRecords);
@@ -80,8 +82,26 @@ const updateReturnField = async () => {
     logger.info('update returnAt of: ', ids);
     idx += numRecord;
   }
-}
+};
 
+const getToken = async () => {
+  const present = new Date();
+  const tokenRecord = await verifyTokensModel
+    .findOneAndUpdate(
+      {},
+      {
+        returnAt: present,
+      },
+      { new: true },
+    )
+    .sort({ returnAt: 1 })
+    .lean();
+  return tokenRecord;
+};
+const testGetToken = async () => {
+  const [record1, record2] = await Promise.all([getToken(), getToken()]);
 
+  logger.info({ record1, record2 });
+};
 
-export { getTokens, parseCookieStringToObj, jobGetTokens, updateReturnField };
+export { getTokens, parseCookieStringToObj, jobGetTokens, updateReturnField, testGetToken };
