@@ -10,11 +10,11 @@ const mainSchema = new mongoose.Schema<VerifyToken>(
       type: String,
       default: null,
     },
-    userId: {
+    username: {
       type: String,
       default: null,
     },
-    sessionStartAt: {
+    sessionExpiredAt: {
       type: String,
       default: null,
     },

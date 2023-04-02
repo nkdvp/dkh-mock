@@ -6,6 +6,8 @@ import studentSubjectsModel from '../models/studentSubject.model';
 import studentSelectionModel from '../models/studentSelection.model';
 import verifyTokensModel from '../models/verifyToken.model';
 import { v4 as uuid } from 'uuid';
+import { sessionExpireTime } from '../constants/iam';
+import { extendSessionValidTime } from '../libs/iam';
 
 const logger = Logger.create('healthcheck.ts');
 const apis: ExpressHandler[] = [
@@ -24,12 +26,17 @@ const apis: ExpressHandler[] = [
 
         const present = new Date();
         const tokenRecord = await verifyTokensModel
-          .findOneAndUpdate({}, {
-            returnAt: present,
-          }, { new: true})
-          .sort({ returnAt: 1})
+          .findOneAndUpdate(
+            {},
+            {
+              returnAt: present,
+            },
+            { new: true },
+          )
+          .sort({ returnAt: 1 })
           .lean();
-        if (tokenRecord.returnAt.getTime() !== present.getTime()) return res.status(500).send('Get token again');
+        if (tokenRecord.returnAt.getTime() !== present.getTime())
+          return res.status(500).send('Get token again');
 
         res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
         res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
@@ -57,27 +64,50 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
-        logger.info('cookie: ', req.cookies);
-        logger.info('headers:', req.headers);
-        logger.info('body: ', req.body);
+        // logger.info('cookie: ', req.cookies);
+        // logger.info('headers:', req.headers);
+        // logger.info('body: ', req.body);
         const CSRF1 = req.cookies?.__RequestVerificationToken;
         const CSRF2 = req.body?.__RequestVerificationToken;
         const username = req.body?.LoginName;
         const password = req.body?.Password;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
 
-        // logger.info('get headers done');
-        if (!CSRF1 || !CSRF2 || !username || !password) return res.status(500).send('Something broke!');
+        // TODO: check username/password in user collection
+
+        if (!CSRF1 || !CSRF2 || !username || !password)
+          return res.status(500).send('Something broke!');
         if (sessionId) return res.status(200).send('Login already');
-        // logger.info('bruhh');
         const newSessionId = uuid();
+
+        const takePlace = await verifyTokensModel
+          .findOneAndUpdate(
+            {
+              csrf1: CSRF1,
+              csrf2: CSRF2,
+              $or: [
+                { sessionId: null },
+                {
+                  sessionExpiredAt: {
+                    $lte: new Date(),
+                  },
+                },
+              ],
+            },
+            {
+              username,
+              sessionId,
+              sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
+            },
+            {
+              new: true,
+            },
+          )
+          .lean();
+        if (takePlace.sessionId === sessionId) res.cookie('ASP.NET_SessionId', newSessionId);
+        else return res.status(500).send('Get token again');
         // logger.info('sessionId: ', newSessionId);
-        res.cookie('ASP.NET_SessionId', newSessionId);
-        // logger.info('sessionId: ', newSessionId);
-        return res.status(200).send('Login done');
-        // TODO: return __RequestVerificationToken,
-        // temporary using user-id in headers
-        return commonResponse(res, '', '', null);
+        return res.status(200).send('Logged in');
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err);
         return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
@@ -94,6 +124,11 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
 
         const listSubjects = await subjectsModel.find().select({ _id: 0, __v: 0 }).lean();
 
@@ -114,6 +149,11 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
 
         const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
         const listSubjectsSelected = await studentSelectionModel
@@ -139,6 +179,11 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
 
         // TODO: should use cache
         const { userid } = req.headers;
@@ -174,6 +219,11 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
 
         const { userid } = req.headers;
         const listSubjectsSelected = await studentSelectionModel

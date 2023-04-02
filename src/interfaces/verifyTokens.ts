@@ -3,8 +3,8 @@ export interface VerifyToken {
   csrf2: string;
 
   sessionId?: string;
-  userId?: string;
-  sessionStartAt?: string;
+  username?: string;
+  sessionExpiredAt?: string;
 
   createdAt: Date;
   returnAt: Date;
