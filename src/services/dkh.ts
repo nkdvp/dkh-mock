@@ -2,25 +2,112 @@ import { ExpressHandler, commonResponse, commonError } from '../interfaces/expre
 import Logger from '../libs/logger';
 import langs from '../constants/langs';
 import subjectsModel from '../models/subjects.model';
-import studentSubjectsModel from '../models/studentSubject.model'
-import studentSelectionModel from '../models/studentSelection.model'
+import studentSubjectsModel from '../models/studentSubject.model';
+import studentSelectionModel from '../models/studentSelection.model';
+import verifyTokensModel from '../models/verifyToken.model';
+import { v4 as uuid } from 'uuid';
+import { sessionExpireTime } from '../constants/iam';
+import { extendSessionValidTime } from '../libs/iam';
 
 const logger = Logger.create('healthcheck.ts');
 const apis: ExpressHandler[] = [
   // doing login
   {
     path: '/dang-nhap',
-    method: 'POST',
+    method: 'GET',
     params: {
-      $$strict: true,
+      // $$strict: true,
+      // username: 'string',
+      // password: 'string',
     },
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
+        const present = new Date();
+        const tokenRecord = await verifyTokensModel
+          .findOneAndUpdate(
+            {},
+            {
+              returnAt: present,
+            },
+            { new: true },
+          )
+          .sort({ returnAt: 1 })
+          .lean();
+        if (tokenRecord.returnAt.getTime() !== present.getTime())
+          return res.status(500).send('Get token again');
+
+        res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
+        res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
+        logger.info('token record: ', tokenRecord);
+
+        return res.status(200).send('Get cookie done');
         // TODO: return __RequestVerificationToken,
-        // temporary using user-id in headers
         return commonResponse(res, '', '', null);
+      } catch (err) {
+        logger.error(req.originalUrl, req.method, 'error:', err);
+        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+      }
+    },
+  },
+  // doing login
+  {
+    path: '/dang-nhap',
+    method: 'POST',
+    params: {
+      // $$strict: true,
+      // username: 'string',
+      // password: 'string',
+    },
+    action: async (req, res) => {
+      try {
+        logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
+
+        // logger.info('cookie: ', req.cookies);
+        // logger.info('headers:', req.headers);
+        // logger.info('body: ', req.body);
+        const CSRF1 = req.cookies?.__RequestVerificationToken;
+        const CSRF2 = req.body?.__RequestVerificationToken;
+        const username = req.body?.LoginName;
+        const password = req.body?.Password;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+
+        // TODO: check username/password in user collection
+
+        if (!CSRF1 || !CSRF2 || !username || !password)
+          return res.status(500).send('Something broke!');
+        if (sessionId) return res.status(200).send('Login already');
+        const newSessionId = uuid();
+
+        const takePlace = await verifyTokensModel
+          .findOneAndUpdate(
+            {
+              csrf1: CSRF1,
+              csrf2: CSRF2,
+              $or: [
+                { sessionId: null },
+                {
+                  sessionExpiredAt: {
+                    $lte: new Date(),
+                  },
+                },
+              ],
+            },
+            {
+              username,
+              sessionId,
+              sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
+            },
+            {
+              new: true,
+            },
+          )
+          .lean();
+        if (takePlace.sessionId === sessionId) res.cookie('ASP.NET_SessionId', newSessionId);
+        else return res.status(500).send('Get token again');
+        // logger.info('sessionId: ', newSessionId);
+        return res.status(200).send('Logged in');
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err);
         return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
@@ -38,10 +125,12 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
-        const listSubjects = await subjectsModel
-          .find()
-          .select({ _id: 0, __v: 0})
-          .lean();
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
+
+        const listSubjects = await subjectsModel.find().select({ _id: 0, __v: 0 }).lean();
 
         return commonResponse(res, '', '', listSubjects);
       } catch (err) {
@@ -60,17 +149,19 @@ const apis: ExpressHandler[] = [
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
-        
-        const listSubjects = await studentSubjectsModel
-          .find()
-          .select({ _id: 0, __v: 0})
-          .lean();
+
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
+
+        const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
         const listSubjectsSelected = await studentSelectionModel
           .find()
-          .select({ _id: 0, __v: 0})
+          .select({ _id: 0, __v: 0 })
           .lean();
 
-        return commonResponse(res, '', '', { listSubjects, listSubjectsSelected, });
+        return commonResponse(res, '', '', { listSubjects, listSubjectsSelected });
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err);
         return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
@@ -89,6 +180,11 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
+
         // TODO: should use cache
         const { userid } = req.headers;
         const { subject_code } = req.body;
@@ -96,10 +192,12 @@ const apis: ExpressHandler[] = [
         // validate subject_code
         // select subject for student
         try {
-          await studentSelectionModel.insertMany([{
-            student_id: userid,
-            subject_code,
-          }])
+          await studentSelectionModel.insertMany([
+            {
+              student_id: userid,
+              subject_code,
+            },
+          ]);
         } catch (err) {
           logger.error('register');
         }
@@ -122,16 +220,21 @@ const apis: ExpressHandler[] = [
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        extendSessionValidTime(sessionId, csrf1);
+
         const { userid } = req.headers;
         const listSubjectsSelected = await studentSelectionModel
           .find({
             student_id: userid,
           })
           .lean();
-        const updateArray = listSubjectsSelected.map(((elem) => ({
+        const updateArray = listSubjectsSelected.map((elem) => ({
           student_id: elem.student_id,
           subject_code: elem.subject_code,
-        })));
+        }));
         const selectionIds = listSubjectsSelected.map((elem) => elem._id);
         try {
           await studentSubjectsModel.insertMany(updateArray);
@@ -139,8 +242,8 @@ const apis: ExpressHandler[] = [
           await studentSelectionModel.deleteMany({
             _id: {
               $in: selectionIds,
-            }
-          })
+            },
+          });
         } catch (err) {
           logger.error('confirm failed: ', err.message);
         }
@@ -164,7 +267,7 @@ const apis: ExpressHandler[] = [
       subject_name: 'string',
       subject_lecture: 'string',
       subject_schedule: 'string',
-      limit_student: 'number|optional', 
+      limit_student: 'number|optional',
     },
     action: async (req, res) => {
       try {
@@ -184,7 +287,7 @@ const apis: ExpressHandler[] = [
               subject_lecture,
               subject_schedule,
               limit_student,
-            }
+            },
           ]);
           logger.info('insert succeed');
         } catch (err) {

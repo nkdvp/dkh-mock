@@ -7,13 +7,15 @@ import { ExpressHandler, ProxyExpressHandler } from './interfaces/expressHandler
 import newValidator from './middlewares/newValidator';
 import defaultRoute from './middlewares/defaultRoute';
 import unhandedErrorFault from './middlewares/unhandedErrorRoute';
-import {
-  createProxyMiddleware,
-} from 'http-proxy-middleware';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import cookieParser from 'cookie-parser';
+
 
 async function ExpressServer() {
   const logger = Logger.create('EXPRESS SERVER');
   const app = express();
+  // add cookie parser
+  app.use(cookieParser());
   // setup global middleware
   app.use(cors());
   app.use(...middlewares);
@@ -43,13 +45,17 @@ async function ExpressServer() {
       //normal api register
       const funcs: RequestHandler[] = [];
       // setup custom preValidatorMiddlewares
-      if (api.preValidatorMiddlewares
-        && api.preValidatorMiddlewares.length > 0) { funcs.push(...api.preValidatorMiddlewares); }
+      if (api.preValidatorMiddlewares && api.preValidatorMiddlewares.length > 0) {
+        funcs.push(...api.preValidatorMiddlewares);
+      }
       // setup new validator
-      if (api.params) { funcs.push(newValidator(api.params)); }
+      if (api.params) {
+        funcs.push(newValidator(api.params));
+      }
       // setup custom preValidatorMiddlewares
-      if (api.postValidatorMiddlewares
-        && api.postValidatorMiddlewares.length > 0) { funcs.push(...api.postValidatorMiddlewares); }
+      if (api.postValidatorMiddlewares && api.postValidatorMiddlewares.length > 0) {
+        funcs.push(...api.postValidatorMiddlewares);
+      }
       // add handler
       funcs.push(api.action);
       // register api
