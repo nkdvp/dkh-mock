@@ -3,3 +3,4 @@ localHostNames.json
 .DS_Store
 .prettierrc
 dist
+.env
