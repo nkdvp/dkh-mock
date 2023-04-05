@@ -26,7 +26,7 @@ const okResponse = (res: Response, data: any = null) => {
 }
 
 const apis: ExpressHandler[] = [
-  // doing login
+  // doing login get
   {
     path: '/dang-nhap',
     method: 'GET',
@@ -55,7 +55,7 @@ const apis: ExpressHandler[] = [
 
         res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
         res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
-        logger.info('token record: ', tokenRecord);
+        // logger.info('token record: ', tokenRecord);
 
         return okResponse(res, 'Get cookie done');
         // TODO: return __RequestVerificationToken,
@@ -65,7 +65,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing login
+  // doing login post
   {
     path: '/dang-nhap',
     method: 'POST',
@@ -110,7 +110,7 @@ const apis: ExpressHandler[] = [
             },
             {
               username,
-              sessionId,
+              sessionId: newSessionId,
               sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
             },
             {
@@ -118,7 +118,7 @@ const apis: ExpressHandler[] = [
             },
           )
           .lean();
-        if (takePlace.sessionId === sessionId) res.cookie('ASP.NET_SessionId', newSessionId);
+        if (takePlace.sessionId === newSessionId) res.cookie('ASP.NET_SessionId', newSessionId);
         else return errorGetTokenAgain(res);
         // logger.info('sessionId: ', newSessionId);
         return okResponse(res, 'Logged in');
