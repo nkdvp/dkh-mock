@@ -6,16 +6,24 @@ const logger = Logger.create('IAM_LIBS');
 
 export const extendSessionValidTime = async (sessionId: string, csrf1: string) => {
   try {
-    await verifyTokensModel.updateOne(
-      {
-        sessionId,
-        csrf1,
-      },
-      {
-        sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
-      },
-    );
+    const present = new Date();
+    const record = await verifyTokensModel
+      .findOneAndUpdate(
+        {
+          sessionId,
+          csrf1,
+          sessionExpiredAt: {
+            $lte: present,
+          },
+        },
+        {
+          sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
+        },
+      )
+      .lean();
+    if (record) return true;
   } catch (err) {
     logger.error('extend session valid time failed: ', err.message);
   }
+  return false;
 };

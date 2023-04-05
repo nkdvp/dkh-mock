@@ -1,6 +1,5 @@
 import { ExpressHandler, commonResponse, commonError } from '../interfaces/expressHandler';
 import Logger from '../libs/logger';
-import langs from '../constants/langs';
 import subjectsModel from '../models/subjects.model';
 import studentSubjectsModel from '../models/studentSubject.model';
 import studentSelectionModel from '../models/studentSelection.model';
@@ -8,8 +7,24 @@ import verifyTokensModel from '../models/verifyToken.model';
 import { v4 as uuid } from 'uuid';
 import { sessionExpireTime } from '../constants/iam';
 import { extendSessionValidTime } from '../libs/iam';
+import { Response } from 'express';
 
-const logger = Logger.create('healthcheck.ts');
+const logger = Logger.create('dkh.ts');
+
+const errorCookieInvalid = (res: Response) => {
+  return res.status(500).send('Cookie invalid');
+};
+const errorGetTokenAgain = (res: Response) => {
+  return res.status(500).send('Get token again');
+}
+const errorUnknownError = (res: Response) => {
+  return res.status(500).send('Something is broken')
+}
+const okResponse = (res: Response, data: any = null) => {
+  if (data) return res.status(200).send(data);
+  return res.status(200);
+}
+
 const apis: ExpressHandler[] = [
   // doing login
   {
@@ -36,18 +51,17 @@ const apis: ExpressHandler[] = [
           .sort({ returnAt: 1 })
           .lean();
         if (tokenRecord.returnAt.getTime() !== present.getTime())
-          return res.status(500).send('Get token again');
+          return errorGetTokenAgain(res);
 
         res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
         res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
         logger.info('token record: ', tokenRecord);
 
-        return res.status(200).send('Get cookie done');
+        return okResponse(res, 'Get cookie done');
         // TODO: return __RequestVerificationToken,
-        return commonResponse(res, '', '', null);
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -76,8 +90,8 @@ const apis: ExpressHandler[] = [
         // TODO: check username/password in user collection
 
         if (!CSRF1 || !CSRF2 || !username || !password)
-          return res.status(500).send('Something broke!');
-        if (sessionId) return res.status(200).send('Login already');
+          return errorGetTokenAgain(res);
+        if (sessionId) return okResponse(res, 'Login already');
         const newSessionId = uuid();
 
         const takePlace = await verifyTokensModel
@@ -105,12 +119,12 @@ const apis: ExpressHandler[] = [
           )
           .lean();
         if (takePlace.sessionId === sessionId) res.cookie('ASP.NET_SessionId', newSessionId);
-        else return res.status(500).send('Get token again');
+        else return errorGetTokenAgain(res);
         // logger.info('sessionId: ', newSessionId);
-        return res.status(200).send('Logged in');
+        return okResponse(res, 'Logged in');
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -127,15 +141,17 @@ const apis: ExpressHandler[] = [
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
-        if (!csrf1 || !sessionId) res.status(500).send('Login again');
-        extendSessionValidTime(sessionId, csrf1);
+        if (!csrf1 || !sessionId) return errorCookieInvalid(res);
+        const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
+        if (!isExtendedSucceed) return errorCookieInvalid(res);
 
         const listSubjects = await subjectsModel.find().select({ _id: 0, __v: 0 }).lean();
+        if (!listSubjects) return errorUnknownError(res);
 
-        return commonResponse(res, '', '', listSubjects);
+        return okResponse(res, listSubjects);
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -152,7 +168,7 @@ const apis: ExpressHandler[] = [
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
-        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         extendSessionValidTime(sessionId, csrf1);
 
         const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
@@ -160,11 +176,12 @@ const apis: ExpressHandler[] = [
           .find()
           .select({ _id: 0, __v: 0 })
           .lean();
+        const result = { listSubjects, listSubjectsSelected };
 
-        return commonResponse(res, '', '', { listSubjects, listSubjectsSelected });
+        return res.status(200).send(result);
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -182,7 +199,7 @@ const apis: ExpressHandler[] = [
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
-        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         extendSessionValidTime(sessionId, csrf1);
 
         // TODO: should use cache
@@ -202,10 +219,10 @@ const apis: ExpressHandler[] = [
           logger.error('register');
         }
 
-        return commonResponse(res, '', '', null);
+        return okResponse(res, 'select done');
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -222,13 +239,13 @@ const apis: ExpressHandler[] = [
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
-        if (!csrf1 || !sessionId) res.status(500).send('Login again');
+        if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         extendSessionValidTime(sessionId, csrf1);
 
-        const { userid } = req.headers;
+        const { userId } = req.headers;
         const listSubjectsSelected = await studentSelectionModel
           .find({
-            student_id: userid,
+            student_id: userId,
           })
           .lean();
         const updateArray = listSubjectsSelected.map((elem) => ({
@@ -246,12 +263,13 @@ const apis: ExpressHandler[] = [
           });
         } catch (err) {
           logger.error('confirm failed: ', err.message);
+          return errorUnknownError(res);
         }
 
         return commonResponse(res, '', '', null);
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
@@ -296,8 +314,8 @@ const apis: ExpressHandler[] = [
 
         return commonResponse(res, '', '', null);
       } catch (err) {
-        logger.error(req.originalUrl, req.method, 'error:', err);
-        return commonError(res, err.message, langs.INTERNAL_SERVER_ERROR, null);
+        logger.error(req.originalUrl, req.method, 'error:', err.message);
+        return errorUnknownError(res);
       }
     },
   },
