@@ -12,7 +12,7 @@ async function runJobs() {
     /// ///// CACHE /////////////
     // jobGetTokens();
     // updateReturnField();
-    testGetToken();
+    // testGetToken();
   } catch (e) {
     logger.error('Run Jobs Error', e.message);
   }

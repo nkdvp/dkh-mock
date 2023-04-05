@@ -4,6 +4,7 @@ import subjectsModel from '../models/subjects.model';
 import studentSubjectsModel from '../models/studentSubject.model';
 import studentSelectionModel from '../models/studentSelection.model';
 import verifyTokensModel from '../models/verifyToken.model';
+import usersModel from '../models/users.model';
 import { v4 as uuid } from 'uuid';
 import { sessionExpireTime } from '../constants/iam';
 import { extendSessionValidTime } from '../libs/iam';
@@ -16,14 +17,14 @@ const errorCookieInvalid = (res: Response) => {
 };
 const errorGetTokenAgain = (res: Response) => {
   return res.status(500).send('Get token again');
-}
+};
 const errorUnknownError = (res: Response) => {
-  return res.status(500).send('Something is broken')
-}
+  return res.status(500).send('Something is broken');
+};
 const okResponse = (res: Response, data: any = null) => {
   if (data) return res.status(200).send(data);
   return res.status(200);
-}
+};
 
 const apis: ExpressHandler[] = [
   // doing login get
@@ -50,8 +51,7 @@ const apis: ExpressHandler[] = [
           )
           .sort({ returnAt: 1 })
           .lean();
-        if (tokenRecord.returnAt.getTime() !== present.getTime())
-          return errorGetTokenAgain(res);
+        if (tokenRecord.returnAt.getTime() !== present.getTime()) return errorGetTokenAgain(res);
 
         res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
         res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
@@ -81,24 +81,28 @@ const apis: ExpressHandler[] = [
         // logger.info('cookie: ', req.cookies);
         // logger.info('headers:', req.headers);
         // logger.info('body: ', req.body);
-        const CSRF1 = req.cookies?.__RequestVerificationToken;
-        const CSRF2 = req.body?.__RequestVerificationToken;
+        const csrf1 = req.cookies?.__RequestVerificationToken;
+        const csrf2 = req.body?.__RequestVerificationToken;
         const username = req.body?.LoginName;
         const password = req.body?.Password;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
 
-        // TODO: check username/password in user collection
+        const validIAM = await usersModel.findOne({ username, password }).lean();
+        if (!validIAM) return res.status(500).send('wrong password');
 
-        if (!CSRF1 || !CSRF2 || !username || !password)
-          return errorGetTokenAgain(res);
-        if (sessionId) return okResponse(res, 'Login already');
+        if (!csrf1 || !csrf2 || !username || !password) return errorGetTokenAgain(res);
+        if (sessionId) {
+          const loginRecord = await verifyTokensModel.findOne({ csrf1, csrf2, sessionId });
+          if (!loginRecord) return errorUnknownError(res);
+          return okResponse(res, 'Login already');
+        }
         const newSessionId = uuid();
 
         const takePlace = await verifyTokensModel
           .findOneAndUpdate(
             {
-              csrf1: CSRF1,
-              csrf2: CSRF2,
+              csrf1: csrf1,
+              csrf2: csrf2,
               $or: [
                 { sessionId: null },
                 {
