@@ -19,11 +19,14 @@ export const extendSessionValidTime = async (sessionId: string, csrf1: string) =
         {
           sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
         },
+        {
+          new: true,
+        },
       )
       .lean();
-    if (record) return true;
+    if (record) return record;
   } catch (err) {
     logger.error('extend session valid time failed: ', err.message);
   }
-  return false;
+  return null;
 };
