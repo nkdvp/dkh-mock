@@ -33,7 +33,7 @@ const apis: ExpressHandler[] = [
     method: 'GET',
     params: {
       // $$strict: true,
-      // username: 'string',
+      // userId: 'string',
       // password: 'string',
     },
     action: async (req, res) => {
@@ -71,7 +71,7 @@ const apis: ExpressHandler[] = [
     method: 'POST',
     params: {
       // $$strict: true,
-      // username: 'string',
+      // userId: 'string',
       // password: 'string',
     },
     action: async (req, res) => {
@@ -83,14 +83,14 @@ const apis: ExpressHandler[] = [
         // logger.info('body: ', req.body);
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const csrf2 = req.body?.__RequestVerificationToken;
-        const username = req.body?.LoginName;
+        const userId = req.body?.LoginName;
         const password = req.body?.Password;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
 
-        const validIAM = await usersModel.findOne({ username, password }).lean();
-        if (!validIAM) return res.status(500).send('username or password invalid');
+        const validIAM = await usersModel.findOne({ userId, password }).lean();
+        if (!validIAM) return res.status(500).send('userId or password invalid');
 
-        if (!csrf1 || !csrf2 || !username || !password) return errorGetTokenAgain(res);
+        if (!csrf1 || !csrf2 || !userId || !password) return errorGetTokenAgain(res);
         if (sessionId) {
           const loginRecord = await verifyTokensModel.findOne({ csrf1, csrf2, sessionId });
           if (!loginRecord) return errorUnknownError(res);
@@ -113,7 +113,7 @@ const apis: ExpressHandler[] = [
               ],
             },
             {
-              username,
+              userId,
               sessionId: newSessionId,
               sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
             },
@@ -173,7 +173,8 @@ const apis: ExpressHandler[] = [
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
-        extendSessionValidTime(sessionId, csrf1);
+        const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
+        if (!isExtendedSucceed) return errorCookieInvalid(res);
 
         const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
         const listSubjectsSelected = await studentSelectionModel
@@ -204,10 +205,11 @@ const apis: ExpressHandler[] = [
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
-        extendSessionValidTime(sessionId, csrf1);
+        const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
+        if (!isExtendedSucceed) return errorCookieInvalid(res);
 
         // TODO: should use cache
-        const { userid } = req.headers;
+        const userId = isExtendedSucceed.userId;
         const { subject_code } = req.body;
 
         // validate subject_code
@@ -215,7 +217,7 @@ const apis: ExpressHandler[] = [
         try {
           await studentSelectionModel.insertMany([
             {
-              student_id: userid,
+              userId: userId,
               subject_code,
             },
           ]);
@@ -244,16 +246,17 @@ const apis: ExpressHandler[] = [
         const csrf1 = req.cookies?.__RequestVerificationToken;
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
-        extendSessionValidTime(sessionId, csrf1);
+        const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
+        if (!isExtendedSucceed) return errorCookieInvalid(res);
 
-        const { userId } = req.headers;
+        const userId = isExtendedSucceed.userId;
         const listSubjectsSelected = await studentSelectionModel
           .find({
-            student_id: userId,
+            userId,
           })
           .lean();
         const updateArray = listSubjectsSelected.map((elem) => ({
-          student_id: elem.student_id,
+          userId: elem.userId,
           subject_code: elem.subject_code,
         }));
         const selectionIds = listSubjectsSelected.map((elem) => elem._id);

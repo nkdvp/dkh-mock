@@ -11,15 +11,14 @@ const errorCookieInvalid = (res: Response) => {
 };
 const errorGetTokenAgain = (res: Response) => {
   return res.status(500).send('Get token again');
-}
+};
 const errorUnknownError = (res: Response) => {
-  return res.status(500).send('Something is broken')
-}
+  return res.status(500).send('Something is broken');
+};
 const okResponse = (res: Response, data: any = null) => {
   if (data) return res.status(200).send(data);
   return res.status(200);
-}
-
+};
 
 const apis: ExpressHandler[] = [
   // create user
@@ -28,20 +27,25 @@ const apis: ExpressHandler[] = [
     method: 'POST',
     params: {
       $$strict: true,
+      userId: 'string',
       username: 'string',
+      meta: 'object',
       password: 'string',
     },
     action: async (req, res) => {
       try {
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
-        const { username, password } = req.body;
-        await usersModel.insertMany([{
-          username, 
-          password,
-        }]);
+        const { userId, username, meta, password } = req.body;
+        await usersModel.insertMany([
+          {
+            userId,
+            username,
+            meta,
+            password,
+          },
+        ]);
         return res.status(200).send('create user done');
-
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err.message);
         return errorUnknownError(res);
@@ -61,7 +65,6 @@ const apis: ExpressHandler[] = [
 
         const list = await usersModel.find({}).lean();
         return res.status(200).send(list);
-
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err.message);
         return errorUnknownError(res);

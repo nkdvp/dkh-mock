@@ -9,11 +9,11 @@ export interface Subjects {
 }
 
 export interface StudentSubjects {
-  student_id: string;
+  userId: string;
   subject_code: number;
 }
 
 export interface StudentSelection {
-  student_id: string;
+  userId: string;
   subject_code: number;
 }
