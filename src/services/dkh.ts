@@ -88,7 +88,7 @@ const apis: ExpressHandler[] = [
         const sessionId = req.cookies?.['ASP.NET_SessionId'];
 
         const validIAM = await usersModel.findOne({ username, password }).lean();
-        if (!validIAM) return res.status(500).send('wrong password');
+        if (!validIAM) return res.status(500).send('username or password invalid');
 
         if (!csrf1 || !csrf2 || !username || !password) return errorGetTokenAgain(res);
         if (sessionId) {
