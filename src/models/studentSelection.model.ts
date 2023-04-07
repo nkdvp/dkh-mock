@@ -5,6 +5,7 @@ const studentSubjectSelectionSchema = new mongoose.Schema<StudentSubjects>(
   {
     userId: 'string',
     subject_code: 'number',
+    to_remove: 'boolean',
   },
   { collection: 'student-subjects-selection' },
 );

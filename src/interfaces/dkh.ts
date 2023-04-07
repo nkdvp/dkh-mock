@@ -4,13 +4,14 @@ export interface Subjects {
   subject_lecture: string;
   subject_schedule: string;
 
-  registered_count: number;
-  limit_student: number;
+  slot_left: number;
+  slot_limit: number;
 }
 
 export interface StudentSubjects {
   userId: string;
   subject_code: number;
+  to_remove: boolean;
 }
 
 export interface StudentSelection {

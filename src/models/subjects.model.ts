@@ -7,11 +7,11 @@ const subjectsSchema = new mongoose.Schema<Subjects>(
     subject_code: 'number',
     subject_lecture: 'string',
     subject_schedule: 'string',
-    registered_count: {
+    slot_left: {
       type: Number,
-      default: 0,
+      default: 30,
     },
-    limit_student: {
+    slot_limit: {
       type: Number,
       default: 30,
     },

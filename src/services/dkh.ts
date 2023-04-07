@@ -8,23 +8,15 @@ import usersModel from '../models/users.model';
 import { v4 as uuid } from 'uuid';
 import { sessionExpireTime } from '../constants/iam';
 import { extendSessionValidTime } from '../libs/iam';
-import { Response } from 'express';
+import {
+  errorCookieInvalid,
+  errorGetTokenAgain,
+  errorSubjectInvalid,
+  errorUnknownError,
+  okResponse,
+} from '../libs/responseFunctions';
 
 const logger = Logger.create('dkh.ts');
-
-const errorCookieInvalid = (res: Response) => {
-  return res.status(500).send('Cookie invalid');
-};
-const errorGetTokenAgain = (res: Response) => {
-  return res.status(500).send('Get token again');
-};
-const errorUnknownError = (res: Response) => {
-  return res.status(500).send('Something is broken');
-};
-const okResponse = (res: Response, data: any = null) => {
-  if (data) return res.status(200).send(data);
-  return res.status(200);
-};
 
 const apis: ExpressHandler[] = [
   // doing login get
@@ -176,9 +168,14 @@ const apis: ExpressHandler[] = [
         const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
         if (!isExtendedSucceed) return errorCookieInvalid(res);
 
-        const listSubjects = await studentSubjectsModel.find().select({ _id: 0, __v: 0 }).lean();
+        const userId = isExtendedSucceed.userId;
+
+        const listSubjects = await studentSubjectsModel
+          .find({ userId })
+          .select({ _id: 0, __v: 0 })
+          .lean();
         const listSubjectsSelected = await studentSelectionModel
-          .find()
+          .find({ userId })
           .select({ _id: 0, __v: 0 })
           .lean();
         const result = { listSubjects, listSubjectsSelected };
@@ -197,6 +194,10 @@ const apis: ExpressHandler[] = [
     params: {
       $$strict: true,
       subject_code: 'number',
+      to_remove: {
+        type: 'boolean',
+        default: false,
+      },
     },
     action: async (req, res) => {
       try {
@@ -210,19 +211,23 @@ const apis: ExpressHandler[] = [
 
         // TODO: should use cache
         const userId = isExtendedSucceed.userId;
-        const { subject_code } = req.body;
+        const { subject_code, to_remove } = req.body;
 
         // validate subject_code
+        const subjectRecord = await subjectsModel.findOne({ subject_code }).lean();
+        if (!subjectRecord) return errorSubjectInvalid(res);
+
         // select subject for student
         try {
           await studentSelectionModel.insertMany([
             {
               userId: userId,
               subject_code,
+              to_remove,
             },
           ]);
         } catch (err) {
-          logger.error('register');
+          logger.error('select failed');
         }
 
         return okResponse(res, 'select done');
@@ -255,19 +260,55 @@ const apis: ExpressHandler[] = [
             userId,
           })
           .lean();
-        const updateArray = listSubjectsSelected.map((elem) => ({
-          userId: elem.userId,
-          subject_code: elem.subject_code,
-        }));
         const selectionIds = listSubjectsSelected.map((elem) => elem._id);
         try {
-          await studentSubjectsModel.insertMany(updateArray);
-          // TODO: trigger count in subject table
           await studentSelectionModel.deleteMany({
             _id: {
               $in: selectionIds,
             },
           });
+          // TODO: using cache when check valid  and check registered
+          const listSubjectRegistered = await studentSubjectsModel.find({ userId }).lean();
+          const confirmPromises = listSubjectsSelected.map(async (record) => {
+            const subject_code = record.subject_code;
+            try {
+              await studentSelectionModel.deleteOne({ _id: record._id });
+              const isRegistered = listSubjectRegistered.find(
+                (elem) => elem.subject_code === subject_code,
+              );
+              if (record.to_remove && isRegistered) {
+                const deletedRecord = await studentSubjectsModel.findOneAndDelete({
+                  userId,
+                  subject_code,
+                });
+                if (deletedRecord)
+                  await subjectsModel.findOneAndUpdate(
+                    { subject_code },
+                    { $inc: { slot_left: 1 } },
+                  );
+              } else if (!record.to_remove && !isRegistered) {
+                const isValidSubject = await subjectsModel.findOneAndUpdate(
+                  {
+                    subject_code,
+                    slot_left: { $gt: 0 },
+                  },
+                  {
+                    $inc: { slot_left: -1 },
+                  },
+                );
+                if (isValidSubject)
+                  await studentSubjectsModel.insertMany([
+                    {
+                      userId,
+                      subject_code,
+                    },
+                  ]);
+              }
+            } catch (err) {
+              logger.error('registered failed with subject and user: ', { userId, subject_code });
+            }
+          });
+          await Promise.all(confirmPromises);
         } catch (err) {
           logger.error('confirm failed: ', err.message);
           return errorUnknownError(res);
