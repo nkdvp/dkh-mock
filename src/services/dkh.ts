@@ -11,6 +11,7 @@ import { extendSessionValidTime } from '../libs/iam';
 import {
   errorCookieInvalid,
   errorGetTokenAgain,
+  errorSessionExpired,
   errorSubjectInvalid,
   errorUnknownError,
   okResponse,
@@ -19,7 +20,7 @@ import {
 const logger = Logger.create('dkh.ts');
 
 const apis: ExpressHandler[] = [
-  // doing login get
+  // done login get
   {
     path: '/dang-nhap',
     method: 'GET',
@@ -57,7 +58,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing login post
+  // done login post
   {
     path: '/dang-nhap',
     method: 'POST',
@@ -84,11 +85,16 @@ const apis: ExpressHandler[] = [
 
         if (!csrf1 || !csrf2 || !userId || !password) return errorGetTokenAgain(res);
         if (sessionId) {
-          const loginRecord = await verifyTokensModel.findOne({ csrf1, csrf2, sessionId });
+          const loginRecord = await verifyTokensModel.findOne({ csrf1, csrf2, userId });
           if (!loginRecord) return errorUnknownError(res);
+          if (new Date(loginRecord.sessionExpiredAt).getTime() < Date.now()) return errorSessionExpired(res);
+          extendSessionValidTime(sessionId, csrf1);
+          res.cookie('ASP.NET_SessionId', loginRecord.sessionId)
           return okResponse(res, 'Login already');
         }
         const newSessionId = uuid();
+        const devLoginTime = 24 * 60 * 60 * 1000;
+        // TODO: case login twice without session id => duplicate username in token management
 
         const takePlace = await verifyTokensModel
           .findOneAndUpdate(
@@ -107,7 +113,8 @@ const apis: ExpressHandler[] = [
             {
               userId,
               sessionId: newSessionId,
-              sessionExpiredAt: new Date(Date.now() + sessionExpireTime),
+              sessionExpiredAt: new Date(Date.now() + devLoginTime),
+              // TODO: devLoginTime => sessionExpireTime
             },
             {
               new: true,
@@ -124,7 +131,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing list subjects
+  // done list subjects
   {
     path: '/danh-sach-mon-hoc/:id',
     method: 'POST',
@@ -151,7 +158,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing list subjects registered
+  // done list subjects registered
   {
     path: '/danh-sach-mon-hoc-da-dang-ky',
     method: 'POST',
@@ -187,7 +194,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing select a subject
+  // done select a subject
   {
     path: '/chon-mon-hoc/',
     method: 'POST',
@@ -237,7 +244,7 @@ const apis: ExpressHandler[] = [
       }
     },
   },
-  // doing confirm selection
+  // done confirm selection
   {
     path: '/xac-nhan-dang-ky',
     method: 'POST',
@@ -333,7 +340,7 @@ const apis: ExpressHandler[] = [
       subject_name: 'string',
       subject_lecture: 'string',
       subject_schedule: 'string',
-      limit_student: 'number|optional',
+      slot_limit: 'number|optional',
     },
     action: async (req, res) => {
       try {
@@ -344,7 +351,7 @@ const apis: ExpressHandler[] = [
         const subject_name: string = req.body.subject_name;
         const subject_lecture: string = req.body.subject_lecture;
         const subject_schedule: string = req.body.subject_schedule;
-        const limit_student: number = req.body.limit_student;
+        const slot_limit: number = req.body.slot_limit;
         try {
           await subjectsModel.insertMany([
             {
@@ -352,7 +359,8 @@ const apis: ExpressHandler[] = [
               subject_name,
               subject_lecture,
               subject_schedule,
-              limit_student,
+              slot_left: slot_limit,
+              slot_limit,
             },
           ]);
           logger.info('insert succeed');
