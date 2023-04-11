@@ -1,4 +1,4 @@
-import { ExpressHandler, commonResponse, commonError } from '../interfaces/expressHandler';
+import { ExpressHandler, commonResponse } from '../interfaces/expressHandler';
 import Logger from '../libs/logger';
 import subjectsModel from '../models/subjects.model';
 import studentSubjectsModel from '../models/studentSubject.model';
@@ -6,7 +6,8 @@ import studentSelectionModel from '../models/studentSelection.model';
 import verifyTokensModel from '../models/verifyToken.model';
 import usersModel from '../models/users.model';
 import { v4 as uuid } from 'uuid';
-import { sessionExpireTime } from '../constants/iam';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { csrf1CookieName, csrf2CookieName, sessionCookieName, sessionExpireTime } from '../constants/iam';
 import { extendSessionValidTime } from '../libs/iam';
 import {
   errorCookieInvalid,
@@ -46,8 +47,8 @@ const apis: ExpressHandler[] = [
           .lean();
         if (tokenRecord.returnAt.getTime() !== present.getTime()) return errorGetTokenAgain(res);
 
-        res.cookie('__RequestVerificationToken', tokenRecord.csrf1);
-        res.cookie('__RequestVerificationToken2', tokenRecord.csrf2);
+        res.cookie(csrf1CookieName, tokenRecord.csrf1);
+        res.cookie(csrf2CookieName, tokenRecord.csrf2);
         // logger.info('token record: ', tokenRecord);
 
         return okResponse(res, 'Get cookie done');
@@ -78,59 +79,63 @@ const apis: ExpressHandler[] = [
         const csrf2 = req.body?.__RequestVerificationToken;
         const userId = req.body?.LoginName;
         const password = req.body?.Password;
-        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        const sessionId = req.cookies?.[sessionCookieName];
 
         const validIAM = await usersModel.findOne({ userId, password }).lean();
         if (!validIAM) return res.status(500).send('userId or password invalid');
 
         if (!csrf1 || !csrf2 || !userId || !password) return errorGetTokenAgain(res);
-        if (sessionId) {
-          const loginRecord = await verifyTokensModel.findOne({ csrf1, csrf2, userId });
-          if (!loginRecord) return errorUnknownError(res);
-          if (new Date(loginRecord.sessionExpiredAt).getTime() < Date.now()) return errorSessionExpired(res);
-          extendSessionValidTime(sessionId, csrf1);
-          res.cookie('ASP.NET_SessionId', loginRecord.sessionId)
-          return okResponse(res, 'Login already');
-        }
-        const newSessionId = uuid();
-        const devLoginTime = 24 * 60 * 60 * 1000;
-        // TODO: case login twice without session id => duplicate username in token management
-
-        const takePlace = await verifyTokensModel
-          .findOneAndUpdate(
-            {
-              csrf1: csrf1,
-              csrf2: csrf2,
-              $or: [
-                { sessionId: null },
-                {
-                  sessionExpiredAt: {
-                    $lte: new Date(),
+        const loginRecord = await verifyTokensModel.findOne({ userId });
+        if (!loginRecord || new Date(loginRecord.sessionExpiredAt).getTime() < Date.now()) {
+          // case login
+          const newSessionId = uuid();
+          const devLoginTime = 24 * 60 * 60 * 1000;
+          const takePlace = await verifyTokensModel
+            .findOneAndUpdate(
+              {
+                csrf1: csrf1,
+                csrf2: csrf2,
+                $or: [
+                  { sessionId: null },
+                  {
+                    sessionExpiredAt: {
+                      $lte: new Date(),
+                    },
                   },
-                },
-              ],
-            },
-            {
-              userId,
-              sessionId: newSessionId,
-              sessionExpiredAt: new Date(Date.now() + devLoginTime),
-              // TODO: devLoginTime => sessionExpireTime
-            },
-            {
-              new: true,
-            },
-          )
-          .lean();
-        if (takePlace.sessionId === newSessionId) res.cookie('ASP.NET_SessionId', newSessionId);
-        else return errorGetTokenAgain(res);
-        // logger.info('sessionId: ', newSessionId);
-        return okResponse(res, 'Logged in');
+                ],
+              },
+              {
+                userId,
+                sessionId: newSessionId,
+                sessionExpiredAt: new Date(Date.now() + devLoginTime),
+                // TODO: devLoginTime => sessionExpireTime
+              },
+              {
+                new: true,
+              },
+            )
+            .lean();
+          if (takePlace.sessionId === newSessionId) {
+            res.cookie(csrf1CookieName, takePlace.csrf1);
+            res.cookie(sessionCookieName, newSessionId);
+          }
+          else return errorGetTokenAgain(res);
+          // logger.info('sessionId: ', newSessionId);
+          return okResponse(res, 'Logged in');
+        }
+        // logged in case: 
+        extendSessionValidTime(sessionId, csrf1);
+        // override __RequestVerificationToken and ASP.NET_SessionId
+        res.cookie(csrf1CookieName, loginRecord.csrf1);
+        res.cookie(sessionCookieName, loginRecord.sessionId)
+        return okResponse(res, 'Login already');
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err.message);
         return errorUnknownError(res);
       }
     },
   },
+  // TODO: case session expired
   // done list subjects
   {
     path: '/danh-sach-mon-hoc/:id',
@@ -143,7 +148,7 @@ const apis: ExpressHandler[] = [
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
-        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        const sessionId = req.cookies?.[sessionCookieName];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
         if (!isExtendedSucceed) return errorCookieInvalid(res);
@@ -170,7 +175,7 @@ const apis: ExpressHandler[] = [
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
-        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        const sessionId = req.cookies?.[sessionCookieName];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
         if (!isExtendedSucceed) return errorCookieInvalid(res);
@@ -211,7 +216,7 @@ const apis: ExpressHandler[] = [
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
-        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        const sessionId = req.cookies?.[sessionCookieName];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
         if (!isExtendedSucceed) return errorCookieInvalid(res);
@@ -256,7 +261,7 @@ const apis: ExpressHandler[] = [
         logger.info(req.originalUrl, req.method, req.params, req.query, req.body);
 
         const csrf1 = req.cookies?.__RequestVerificationToken;
-        const sessionId = req.cookies?.['ASP.NET_SessionId'];
+        const sessionId = req.cookies?.[sessionCookieName];
         if (!csrf1 || !sessionId) return errorCookieInvalid(res);
         const isExtendedSucceed = await extendSessionValidTime(sessionId, csrf1);
         if (!isExtendedSucceed) return errorCookieInvalid(res);
@@ -321,7 +326,7 @@ const apis: ExpressHandler[] = [
           return errorUnknownError(res);
         }
 
-        return commonResponse(res, '', '', null);
+        return okResponse(res, 'confirmed');
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err.message);
         return errorUnknownError(res);
@@ -368,7 +373,7 @@ const apis: ExpressHandler[] = [
           logger.warn('insert subject failed: ', err.message);
         }
 
-        return commonResponse(res, '', '', null);
+        return okResponse(res, 'subject created');
       } catch (err) {
         logger.error(req.originalUrl, req.method, 'error:', err.message);
         return errorUnknownError(res);
